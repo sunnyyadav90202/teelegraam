@@ -1,57 +1,21 @@
+# main.py - Inline-only Wallet + Marketplace (Option B) - replace your existing main.py with this
+
 import os
 import threading
+import time
+import uuid
+import sqlite3
 from flask import Flask
 import telebot
-
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("Set the BOT_TOKEN environment variable in Replit Secrets")
-
-bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
-app = Flask(__name__)
-
-# ---- Telegram handlers ----
-@bot.message_handler(commands=['start'])
-def cmd_start(message):
-    bot.reply_to(message, "Hi! I'm your bot. Send me anything and I'll echo it back.")
-
-@bot.message_handler(commands=['help'])
-def cmd_help(message):
-    bot.reply_to(message, "Commands:\n/start - welcome\n/help - this message\n/echo <text> - bot will reply with <text>")
-
-@bot.message_handler(commands=['echo'])
-def cmd_echo(message):
-    text = message.text.partition(' ')[2]
-    if text:
-        bot.reply_to(message, text)
-    else:
-        bot.reply_to(message, "Usage: /echo hello")
-
-@bot.message_handler(func=lambda m: True)
-def echo_all(message):
-    # simple echo; replace with your bot logic
-    bot.reply_to(message, f"You said: {message.text}")
-
-def run_bot_polling():
-    # infinity_polling automatically reconnects on errors
-    bot.infinity_polling(timeout=20, long_polling_timeout = 90)
-
-# ---- Keepalive endpoint for uptime monitor ----
-@app.route('/ping')
-def ping():
-    return "pong", 200
-
-if __name__ == '__main__':
-    # start bot in background thread
-    t = threading.Thread(target=run_bot_polling, daemon=True)
-    t.start()
-
-    port = int(os.environ.get("PORT", 3000))
-    # Run Flask (this keeps the HTTP server running for pings)
-    app.run(host="0.0.0.0", port=port)
-# ---------------- Inline-only Wallet + Marketplace (Option B) ----------------
-import sqlite3, time, uuid
 from telebot import types
+
+# ----------------- Configuration -----------------
+BOT_TOKEN = os.environ.get("8320599781:AAFIJuOv5o1rwJD7Ayec8MrqKYXxpUoTCxw")
+if not BOT_TOKEN:
+    raise RuntimeError("Set BOT_TOKEN in environment (Replit Secrets)")
+
+bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
 ADMIN_ID = 7257298716  # change if needed
 DB_PATH = "bot_data.db"
@@ -160,13 +124,11 @@ def main_menu_kb(user_id):
         types.InlineKeyboardButton(f"➕ Add Funds", callback_data=f"addfunds"),
         types.InlineKeyboardButton(f"📖 Help", callback_data=f"help"),
     )
-    # Add hidden admin button visible only to admin (same layout but callback exists)
     if user_id == ADMIN_ID:
         kb.add(types.InlineKeyboardButton("🔧 Admin", callback_data="admin_panel"))
     return kb
 
 def wallet_kb(user_id):
-    bal = get_balance(user_id)
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton(f"Add ₹50", callback_data=f"add::50"),
@@ -254,7 +216,7 @@ def main_menu_text(user_id):
     purchases = db_execute("SELECT COUNT(*) FROM purchases WHERE user_id = ?", (user_id,), fetch=True)[0][0]
     return f"🌟 Welcome!\nBalance: ₹{bal:.2f}\nPurchases: {purchases}\n\nChoose an action:"
 
-# ---------- Start (entry) - use an inline start menu instead of commands ----------
+# ---------- Start (entry) ----------
 @bot.message_handler(commands=['start'])
 def cmd_start_inline(message):
     ensure_user(message.from_user)
@@ -284,10 +246,8 @@ def inline_router(call):
         return
 
     if data.startswith("add::"):
-        # create a pending payment invoice for preset amount
         amt = float(data.split("::",1)[1])
         payid = create_payment(uid, amt)
-        # Notify user with instructions to confirm payment via admin (or manual)
         txt = f"🧾 Invoice created: `{payid}`\nAmount: ₹{amt:.2f}\n\nTo complete (simulated): ask admin to confirm this invoice in admin panel."
         bot.edit_message_text(txt, chat_id=call.message.chat.id, message_id=call.message.message_id,
                               reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("◀️ Back", callback_data="back_to_main")))
@@ -338,7 +298,6 @@ def inline_router(call):
         if bal < price:
             bot.answer_callback_query(call.id, "Insufficient balance. Use Add Funds.", show_alert=True)
             return
-        # deduct and deliver
         adjust_balance(uid, -price)
         record_purchase(uid, lid, price)
         txt = f"✅ Purchased: {title}\nHere is your link:\n{url}\n\nRemaining balance: ₹{get_balance(uid):.2f}"
@@ -354,7 +313,6 @@ def inline_router(call):
                                   reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("◀️ Back", callback_data="back_to_main")))
             bot.answer_callback_query(call.id)
             return
-        # show purchases list
         text = "📜 Your purchases:\n"
         for r in rows:
             lid, price, ts = r
@@ -406,14 +364,11 @@ def inline_router(call):
         if status == "paid":
             bot.answer_callback_query(call.id, "Already paid.")
             return
-        # mark paid and credit user
         set_payment_status(pid, "paid")
         adjust_balance(user_id, float(amount))
         bot.answer_callback_query(call.id, "Payment confirmed and user credited.")
-        # refresh pending list
         bot.edit_message_text("💳 Pending Payments", chat_id=call.message.chat.id, message_id=call.message.message_id,
                               reply_markup=admin_pending_kb())
-        # notify user
         bot.send_message(user_id, f"✅ Your top-up of ₹{float(amount):.2f} has been approved by admin. Current balance: ₹{get_balance(user_id):.2f}")
         return
 
@@ -421,12 +376,10 @@ def inline_router(call):
         if uid != ADMIN_ID:
             bot.answer_callback_query(call.id, "Not allowed.")
             return
-        # start interactive add link: ask admin to send "title|price|url" as a single message (minimal typing)
         bot.edit_message_text("Send new link details as: title | price | url\nExample:\nNaruto Ep1 | 50 | https://example.com/ep1",
                               chat_id=call.message.chat.id, message_id=call.message.message_id,
                               reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("◀️ Back", callback_data="admin_panel")))
         bot.answer_callback_query(call.id)
-        # register next step handler to collect admin input
         @bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID)
         def _collect_new_link(msg):
             if '|' not in msg.text:
@@ -440,7 +393,6 @@ def inline_router(call):
                 return
             lid = add_link(title, price, url, seller=ADMIN_ID)
             bot.reply_to(msg, f"Link added: {title} | ₹{price:.2f}\nID: {lid}")
-            # unregister this handler by replacing with a noop (telebot lacks direct unregister; this will naturally apply)
         return
 
     if data == "admin_listlinks":
@@ -482,3 +434,23 @@ def inline_router(call):
 
     # noop / unknown
     bot.answer_callback_query(call.id, "Action not supported.")
+
+# ---------- Flask keepalive endpoint ----------
+@app.route("/")
+def index():
+    return "Bot is running ✅"
+
+# ---------- Bot runner (polling in background) ----------
+def run_bot_polling():
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=90)
+        except Exception as e:
+            print("Polling error:", e)
+            time.sleep(5)
+
+if __name__ == "__main__":
+    t = threading.Thread(target=run_bot_polling, daemon=True)
+    t.start()
+    port = int(os.environ.get("PORT", 3000))
+    app.run(host="0.0.0.0", port=port)
