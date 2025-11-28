@@ -1,5 +1,4 @@
-# main.py - Inline-only Wallet + Marketplace (Option B) - replace your existing main.py with this
-
+# main.py - Inline-only Wallet + Marketplace (Option B)
 import os
 import threading
 import time
@@ -9,10 +8,13 @@ from flask import Flask
 import telebot
 from telebot import types
 
-# ----------------- Configuration -----------------
+# ---------- Config ----------
 BOT_TOKEN = os.environ.get("8320599781:AAFIJuOv5o1rwJD7Ayec8MrqKYXxpUoTCxw")
 if not BOT_TOKEN:
     raise RuntimeError("Set BOT_TOKEN in environment (Replit Secrets)")
+
+# debug print to confirm correct file started
+print(">>> INLINE-WALLET BOT STARTED (main.py) - waiting for poller...")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
@@ -115,7 +117,6 @@ def get_user_purchases(user_id):
 
 # ---------- UI builders ----------
 def main_menu_kb(user_id):
-    bal = get_balance(user_id)
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton(f"💼 Wallet", callback_data=f"wallet"),
@@ -444,6 +445,7 @@ def index():
 def run_bot_polling():
     while True:
         try:
+            print("Starting polling loop...")
             bot.infinity_polling(timeout=60, long_polling_timeout=90)
         except Exception as e:
             print("Polling error:", e)
