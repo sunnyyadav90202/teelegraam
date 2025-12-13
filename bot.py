@@ -5,7 +5,7 @@ import os
 
 # ================= CONFIG =================
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "8117972904:AAHRSvFFeOlf17_LExSYRLSGHKunkV8elXA"
-CHANNEL_USERNAME = "@beastanime007"   # without https://
+CHANNEL_USERNAME = "@beastanime007"  # without https://
 # =========================================
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
@@ -89,8 +89,8 @@ def start(message):
 """
     )
 
-# ================= CALLBACK HANDLER =================
-@bot.callback_handler(func=lambda call: call.data == "check_join")
+# ================= CALLBACK QUERY HANDLER (FIXED) =================
+@bot.callback_query_handler(func=lambda call: call.data == "check_join")
 def check_join(call):
     if is_joined(call.from_user.id):
         bot.answer_callback_query(call.id, "Verified!")
@@ -102,7 +102,7 @@ def check_join(call):
             show_alert=True
         )
 
-# ================= STATS =================
+# ================= STATS COMMAND =================
 @bot.message_handler(commands=["stats"])
 def stats(message):
     cursor.execute(
