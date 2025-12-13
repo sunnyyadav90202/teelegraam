@@ -4,8 +4,8 @@ from telebot import types
 
 # ========== CONFIG ==========
 BOT_TOKEN = "8117972904:AAHRSvFFeOlf17_LExSYRLSGHKunkV8elXA"
-CHANNEL_USERNAME = "https://t.me/earning_mafia_007"  # without https://
-ADMIN_ID = 123456789
+CHANNEL_USERNAME = "@beastanime007"  # without https://
+ADMIN_ID = 7257298716
 # ============================
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
